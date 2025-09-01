@@ -1,0 +1,408 @@
+---
+title: "Playoff 2 Messy Work 2"
+author: "Weston Murdock"
+date: "2023-04-03"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(readr) # Data Reading
+library(car) # VIF Calculation
+library(Stat2Data) # Textbook
+library(leaps) # Model Selection
+library(corrplot) # Correlation Plot
+library(polynom) # Polynomial Models
+library(bestglm) # Logistic Regression Model Selection
+library(MASS) # Better Logistic Regression Model Selection
+library(dplyr) # Piping Syntax
+library(gmodels) # Contrasts
+library(ggplot2) # Visualizations
+library(data.table)
+library(zoo)
+library(nbastatR)
+library(data.table)
+
+logit = function(B0, B1, x)
+{
+  exp(B0+B1*x)/(1+exp(B0+B1*x))
+}
+
+Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
+```
+
+
+```{r}
+temp = list.files("/Users/wlm0921/Documents/Current Courses/STOR 538/Playoff 2/CSV Files/", pattern="*.csv")
+setwd("/Users/wlm0921/Documents/Current Courses/STOR 538/Playoff 2/CSV Files/")
+for (i in 1:length(temp)) {
+  assign(substr(temp[i], 1, nchar(temp[i]) - 4), read.csv(temp[i]))
+}
+```
+
+
+```{r}
+games_details = read_csv("GAMES_DETAILS_H_W.csv")
+bad_ids = read_csv("BAD_IDs.csv")
+```
+
+
+```{r}
+shared_games = intersect(ALLNBAGames$Game_ID, games_details$GAME_ID)
+length(shared_games)
+```
+
+
+```{r}
+max(shared_games)
+ALLNBAGames$GAME_DATE_EST.x[which(ALLNBAGames$Game_ID == max(shared_games))]
+```
+
+
+```{r}
+games_data = ALLNBAGames
+games_data$OREB = games_data$OREB_home + games_data$OREB_away
+games_data$Total = games_data$PTS_home + games_data$PTS_away
+games_data$Spread = games_data$PTS_home - games_data$PTS_away
+```
+
+
+```{r}
+write_csv(games_data, "games_data.csv")
+```
+
+
+```{r}
+teams_df_list = list.files("/Users/wlm0921/Documents/Current Courses/STOR 538/Playoff 2/Teams/", pattern="*.csv")
+for (i in 1:30) {
+  teams_df_list[i] = substr(teams_df_list[i], 1, nchar(teams_df_list[i]) - 4)
+}
+team_id_dict = data.table()
+for (i in 1:30) {
+  current_team = get(teams_df_list[i])
+  team_id_dict = rbind(team_id_dict, data.table(id = current_team$TEAM_ID[1], df = teams_df_list[i]))
+}
+head(team_id_dict)
+```
+
+
+```{r}
+write_csv(team_id_dict, "team_id_dict.csv")
+```
+
+
+```{r}
+games_data2 = subset(games_data, select = -c(MIN_away, SPREAD_home, SEASON.y, GAME_DATE_EST.y, SPREAD_away))
+```
+
+
+```{r}
+games_data_players = games_data
+
+# games_data_players$PLAYER1ID_home = NA
+# games_data_players$PLAYER2ID_home = NA
+# games_data_players$PLAYER3ID_home = NA
+# games_data_players$PLAYER4ID_home = NA
+# games_data_players$PLAYER5ID_home = NA
+# games_data_players$PLAYER1ID_away = NA
+# games_data_players$PLAYER2ID_away = NA
+# games_data_players$PLAYER3ID_away = NA
+# games_data_players$PLAYER4ID_away = NA
+# games_data_players$PLAYER5ID_away = NA
+# 
+# games_data_players$PLAYER1MIN_home = NA
+# games_data_players$PLAYER2MIN_home = NA
+# games_data_players$PLAYER3MIN_home = NA
+# games_data_players$PLAYER4MIN_home = NA
+# games_data_players$PLAYER5MIN_home = NA
+# games_data_players$PLAYER1MIN_away = NA
+# games_data_players$PLAYER2MIN_away = NA
+# games_data_players$PLAYER3MIN_away = NA
+# games_data_players$PLAYER4MIN_away = NA
+# games_data_players$PLAYER5MIN_away = NA
+# 
+# games_data_players$PLAYER1FGM_home = NA
+# games_data_players$PLAYER2FGM_home = NA
+# games_data_players$PLAYER3FGM_home = NA
+# games_data_players$PLAYER4FGM_home = NA
+# games_data_players$PLAYER5FGM_home = NA
+# games_data_players$PLAYER1FGM_away = NA
+# games_data_players$PLAYER2FGM_away = NA
+# games_data_players$PLAYER3FGM_away = NA
+# games_data_players$PLAYER4FGM_away = NA
+# games_data_players$PLAYER5FGM_away = NA
+# 
+# games_data_players$PLAYER1FGA_home = NA
+# games_data_players$PLAYER2FGA_home = NA
+# games_data_players$PLAYER3FGA_home = NA
+# games_data_players$PLAYER4FGA_home = NA
+# games_data_players$PLAYER5FGA_home = NA
+# games_data_players$PLAYER1FGA_away = NA
+# games_data_players$PLAYER2FGA_away = NA
+# games_data_players$PLAYER3FGA_away = NA
+# games_data_players$PLAYER4FGA_away = NA
+# games_data_players$PLAYER5FGA_away = NA
+# 
+# games_data_players$PLAYER1OREB_home = NA
+# games_data_players$PLAYER2OREB_home = NA
+# games_data_players$PLAYER3OREB_home = NA
+# games_data_players$PLAYER4OREB_home = NA
+# games_data_players$PLAYER5OREB_home = NA
+# games_data_players$PLAYER1OREB_away = NA
+# games_data_players$PLAYER2OREB_away = NA
+# games_data_players$PLAYER3OREB_away = NA
+# games_data_players$PLAYER4OREB_away = NA
+# games_data_players$PLAYER5OREB_away = NA
+# 
+# games_data_players$PLAYER1PTS_home = NA
+# games_data_players$PLAYER2PTS_home = NA
+# games_data_players$PLAYER3PTS_home = NA
+# games_data_players$PLAYER4PTS_home = NA
+# games_data_players$PLAYER5PTS_home = NA
+# games_data_players$PLAYER1PTS_away = NA
+# games_data_players$PLAYER2PTS_away = NA
+# games_data_players$PLAYER3PTS_away = NA
+# games_data_players$PLAYER4PTS_away = NA
+# games_data_players$PLAYER5PTS_away = NA
+# 
+# games_data_players$PLAYER1PM_home = NA
+# games_data_players$PLAYER2PM_home = NA
+# games_data_players$PLAYER3PM_home = NA
+# games_data_players$PLAYER4PM_home = NA
+# games_data_players$PLAYER5PM_home = NA
+# games_data_players$PLAYER1PM_away = NA
+# games_data_players$PLAYER2PM_away = NA
+# games_data_players$PLAYER3PM_away = NA
+# games_data_players$PLAYER4PM_away = NA
+# games_data_players$PLAYER5PM_away = NA
+# 
+# games_data_players$PLAYER1HEIGHT_home = NA
+# games_data_players$PLAYER2HEIGHT_home = NA
+# games_data_players$PLAYER3HEIGHT_home = NA
+# games_data_players$PLAYER4HEIGHT_home = NA
+# games_data_players$PLAYER5HEIGHT_home = NA
+# games_data_players$PLAYER1HEIGHT_away = NA
+# games_data_players$PLAYER2HEIGHT_away = NA
+# games_data_players$PLAYER3HEIGHT_away = NA
+# games_data_players$PLAYER4HEIGHT_away = NA
+# games_data_players$PLAYER5HEIGHT_away = NA
+# 
+# games_data_players$PLAYER1WEIGHT_home = NA
+# games_data_players$PLAYER2WEIGHT_home = NA
+# games_data_players$PLAYER3WEIGHT_home = NA
+# games_data_players$PLAYER4WEIGHT_home = NA
+# games_data_players$PLAYER5WEIGHT_home = NA
+# games_data_players$PLAYER1WEIGHT_away = NA
+# games_data_players$PLAYER2WEIGHT_away = NA
+# games_data_players$PLAYER3WEIGHT_away = NA
+# games_data_players$PLAYER4WEIGHT_away = NA
+# games_data_players$PLAYER5WEIGHT_away = NA
+
+```
+
+
+```{r}
+write_csv(games_data_players, "games_data_players.csv")
+```
+
+
+```{r}
+668628/4*3
+```
+
+
+```{r}
+write_csv(games_details[1:167157,], "GAMES_DETAILS_H_W_1.csv")
+write_csv(games_details[167157:334314,], "GAMES_DETAILS_H_W_2.csv")
+write_csv(games_details[334314:501471,], "GAMES_DETAILS_H_W_3.csv")
+write_csv(games_details[501471:668628,], "GAMES_DETAILS_H_W_4.csv")
+```
+
+
+```{r}
+unique(games_data_players$HOME_TEAM[which(games_data_players$TEAM_ID_home == 1610612740)])
+```
+
+
+```{r}
+index = which(games_data_players$Game_ID == 22200477)
+index
+test_game = games_details[which(games_details$GAME_ID == games_data_players$Game_ID[index]),]
+test_home = test_game[which(test_game$TEAM_ID == games_data_players$TEAM_ID_home[index]),]
+test_away = test_game[which(test_game$TEAM_ID == games_data_players$TEAM_ID_away[index]),]
+
+test_home = test_home[order(test_home$MIN, decreasing=TRUE),]
+test_home
+```
+
+
+
+```{r}
+shared_ids = intersect(games_data_players$Game_ID, games_details$GAME_ID)
+indices = 1:2
+for (game_id in shared_ids[indices]) {
+  index = which(games_data_players$Game_ID == game_id)
+  current_game = games_details[which(games_details$GAME_ID == games_data_players$Game_ID[index]),]
+  current_home = current_game[which(current_game$TEAM_ID == games_data_players$TEAM_ID_home[index]),]
+  current_away = current_game[which(current_game$TEAM_ID == games_data_players$TEAM_ID_away[index]),]
+  
+  # current_home = sort by minutes played...
+}
+```
+
+
+```{r}
+test_game = games_details[which(games_details$GAME_ID == 11400001),]
+mean(test_game$OREB[which(!is.na(test_game$OREB))])
+```
+
+
+```{r}
+games_data_players2 = games_data
+
+games_data_players2$AVG_HEIGHT_home = NA
+games_data_players2$AVG_WEIGHT_home = NA
+games_data_players2$STARTERS_PM_home = NA
+
+games_data_players2$AVG_HEIGHT_away = NA
+games_data_players2$AVG_WEIGHT_away = NA
+games_data_players2$STARTERS_PM_away = NA
+```
+
+
+```{r}
+games_all_players_home = games_details[which(!is.na(games_details$MIN) & which(games_details$TEAM_ID == games_data$TEAM_ID_home[games_data$Game_ID == games_details$GAME_ID])),]
+
+games_starters_home = games_details[which(!is.na(games_details$START_POSITION) & which(games_details$TEAM_ID == games_data$TEAM_ID_home)),]
+
+games_all_players_away = games_details[which(!is.na(games_details$MIN) & which(games_details$TEAM_ID == games_data$TEAM_ID_away)),]
+
+games_starters_away = games_details[which(!is.na(games_details$START_POSITION) & which(games_details$TEAM_ID == games_data$TEAM_ID_away)),]
+
+
+aggregated_all_players_home = games_all_players_home %>% group_by(GAME_ID) %>% summarise(AVG_HEIGHT_home = mean(HEIGHT, na.rm = TRUE), AVG_WEIGHT_home = mean(WEIGHT, na.rm = TRUE))
+
+aggregated_starters_home = games_starters_home %>% group_by(GAME_ID) %>% summarise(STARTERS_PM_home = sum(PLUS_MINUS))
+
+aggregated_all_players_away = games_all_players_away %>% group_by(GAME_ID) %>% summarise(AVG_HEIGHT_away = mean(HEIGHT, na.rm = TRUE), AVG_WEIGHT_away = mean(WEIGHT, na.rm = TRUE))
+
+aggregated_starters_away = games_starters_away %>% group_by(GAME_ID) %>% summarise(STARTERS_PM_away = sum(PLUS_MINUS))
+
+aggregated_data = unique(games_details[,c("GAME_ID", "TEAM_ID")]) %>% merge(aggregated_all_players_home) %>% merge(aggregated_all_players_away) %>% merge(aggregated_starters_home) %>% merge(aggregated_starters_away)
+head(aggregated_data)
+```
+
+
+```{r}
+games_all_players = games_details[which(!is.na(games_details$MIN)),]
+
+games_starters = games_details[which(!is.na(games_details$START_POSITION)),]
+
+aggregated_all_players = games_all_players %>% group_by(GAME_ID, TEAM_ID) %>% summarise(AVG_HEIGHT = mean(HEIGHT, na.rm=TRUE), AVG_WEIGHT = mean(WEIGHT, na.rm=TRUE))
+
+aggregated_starters = games_starters %>% group_by(GAME_ID, TEAM_ID) %>% summarise(STARTERS_PM = sum(PLUS_MINUS, na.rm=TRUE))
+
+aggregated_data = unique(games_details[, c("GAME_ID", "TEAM_ID")]) %>% merge(aggregated_all_players) %>% merge(aggregated_starters)
+head(aggregated_data)
+```
+
+
+```{r}
+aggregated_data$row = seq_len(nrow(aggregated_data)) %% 2
+aggregated_home = aggregated_data[aggregated_data$row == 1,]
+aggregated_away = aggregated_data[aggregated_data$row == 0,]
+
+aggregated_home = aggregated_home %>% rename(
+  Game_ID = GAME_ID,
+  TEAM_ID_home = TEAM_ID,
+  AVG_HEIGHT_home = AVG_HEIGHT,
+  AVG_WEIGHT_home = AVG_WEIGHT,
+  STARTERS_PM_home = STARTERS_PM
+)
+aggregated_home = aggregated_home[,-6]
+
+aggregated_away = aggregated_away %>% rename(
+  Game_ID = GAME_ID,
+  TEAM_ID_away = TEAM_ID,
+  AVG_HEIGHT_away = AVG_HEIGHT,
+  AVG_WEIGHT_away = AVG_WEIGHT,
+  STARTERS_PM_away = STARTERS_PM
+)
+aggregated_away = aggregated_away[,-6]
+
+head(aggregated_home)
+head(aggregated_away)
+```
+
+
+```{r}
+games_data3 = games_data %>% merge(aggregated_home) %>% merge(aggregated_away)
+```
+
+
+```{r}
+games_data3$BULLY_BALL_home = (games_data3$AVG_HEIGHT_home * games_data3$AVG_WEIGHT_home)
+games_data3$BULLY_BALL_home = (games_data3$BULLY_BALL_home - min(games_data3$BULLY_BALL_home)) / range(games_data3$BULLY_BALL_home)
+
+games_data3$BULLY_BALL_away = (games_data3$AVG_HEIGHT_away * games_data3$AVG_WEIGHT_away)
+games_data3$BULLY_BALL_away = (games_data3$BULLY_BALL_away - min(games_data3$BULLY_BALL_away)) / range(games_data3$BULLY_BALL_away)
+```
+
+
+```{r}
+write_csv(games_data3, "GAMES_DATA.csv")
+```
+
+
+```{r}
+hist(games_data3$Total)
+```
+
+
+```{r}
+hist(games_data3$Spread)
+```
+
+
+```{r}
+hist(games_data3$OREB)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

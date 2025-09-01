@@ -1,0 +1,285 @@
+---
+title: "Playoff 2 Messy Work 5"
+author: "Weston Murdock"
+date: "2023-04-04"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(readr) # Data Reading
+library(car) # VIF Calculation
+library(Stat2Data) # Textbook
+library(leaps) # Model Selection
+library(corrplot) # Correlation Plot
+library(polynom) # Polynomial Models
+library(bestglm) # Logistic Regression Model Selection
+library(MASS) # Better Logistic Regression Model Selection
+library(dplyr) # Piping Syntax
+library(gmodels) # Contrasts
+library(ggplot2) # Visualizations
+library(data.table)
+library(zoo)
+library(nbastatR)
+library(data.table)
+library(Metrics)
+
+logit = function(B0, B1, x)
+{
+  exp(B0+B1*x)/(1+exp(B0+B1*x))
+}
+
+Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
+```
+
+
+```{r}
+games_data = read_csv("games_data.csv")
+predictions = read_csv("PredictionsTemp.csv")
+ALLNBAGames = read_csv("ALLNBAGames.csv")
+```
+
+
+```{r}
+team_dict = data.frame(TEAM_NAME = unique(ALLNBAGames$HOME_TEAM[ALLNBAGames$SEASON.x == 2023]), TEAM_ID = unique(ALLNBAGames$TEAM_ID_home[ALLNBAGames$SEASON.x == 2023]))
+```
+
+
+```{r}
+team_dict$TEAM_NAME[30] = "Los Angeles Clippers"
+```
+
+
+```{r}
+team_dict$TEAM_ID[team_dict$TEAM_NAME == team_name]
+```
+
+
+```{r}
+for (i in 1:length(predictions$Away)) {
+  team_name = predictions$Away[i]
+  predictions$Away[i] = as.numeric(team_dict$TEAM_ID[team_dict$TEAM_NAME == team_name])
+}
+```
+
+
+```{r}
+predictions = rename(predictions,
+                     TEAM_ID_home = Home,
+                     TEAM_ID_away = Away)
+```
+
+
+```{r}
+write_csv(predictions, "PredictionsTemp.csv")
+```
+
+
+
+
+
+
+
+
+
+
+```{r}
+new_row1 = games_data[1, colnames(games_data)]
+new_row1[2]
+```
+
+
+
+
+```{r}
+running_games_data = games_data
+for (i in 1:length(predictions)) {
+  new_row = games_data[1, colnames(games_data)]
+  
+  home_team = predictions$TEAM_ID_home[i]
+  away_team = predictions$TEAM_ID_away[i]
+  
+  home_team_indices = which((running_games_data$TEAM_ID_home == home_team) | (running_games_data$TEAM_ID_away == home_team))
+  home_team_indices = home_team_indices[length(home_team_indices)-10:length(home_team_indices)]
+  away_team_indices = which((running_games_data$TEAM_ID_home == away_team) | (running_games_data$TEAM_ID_away == away_team))
+  away_team_indices = away_team_indices[length(away_team_indices)-10:length(away_team_indices)]
+  
+  home_team_data = running_games_data[home_team_indices,]
+  away_team_data = running_games_data[away_team_indices,]
+  
+  for (j in 1:nrow(home_team_data)) {
+    if (home_team_data$TEAM_ID_home == home_team) {
+      new_row[1, c(3, 5:25, 48:53, 57)] = new_row[1, c(3, 5:25, 48:53, 57)] + 
+    } else {
+      
+    }
+  }
+  
+}
+```
+
+
+
+
+
+```{r}
+running_games_data = games_data
+for (i in 1:length(predictions)) {
+  new_row = games_data[1, colnames(games_data)]
+  
+  home_team = as.numeric(predictions$TEAM_ID_home[i])
+  away_team = as.numeric(predictions$TEAM_ID_away[i])
+  
+  home_team_indices = which((running_games_data$TEAM_ID_home == home_team))
+  home_team_indices = home_team_indices[length(home_team_indices)-10:length(home_team_indices)]
+  away_team_indices = which((running_games_data$TEAM_ID_away == away_team))
+  away_team_indices = away_team_indices[length(away_team_indices)-10:length(away_team_indices)]
+  
+  home_team_data = running_games_data[home_team_indices,]
+  away_team_data = running_games_data[away_team_indices,]
+  
+  new_row[c(3:25, 48:53, 57)] = apply(home_team_data[c(3:25, 48:53, 57)], 2, mean)
+  new_row[c(2, 26:47, 54:56, 58)] = apply(away_team_data[c(2, 26:47, 54:56, 58)], 2, mean)
+  
+  new_row[1] = running_games_data$Game_ID[length(running_games_data)] + 1
+  running_games_data = rbind(running_games_data, new_row)
+}
+```
+
+
+```{r}
+i = 2
+running_games_data = games_data
+
+new_row = games_data[1, colnames(games_data)]
+
+home_team = as.numeric(predictions$TEAM_ID_home[i])
+away_team = as.numeric(predictions$TEAM_ID_away[i])
+
+home_team_data = subset(running_games_data, running_games_data$TEAM_ID_home == home_team)
+away_team_data = subset(running_games_data, running_games_data$TEAM_ID_away == away_team)
+
+# home_team_data = running_games_data[home_team_indices,]
+# away_team_data = running_games_data[away_team_indices,]
+
+home_team_averages = apply(home_team_data, 2, mean)
+away_team_averages = apply(away_team_data, 2, mean)
+
+new_row[c(3:25, 48:53, 57)] = home_team_averages[c(3:25, 48:53, 57)]
+new_row[c(2, 26:47, 54:56, 58)] = away_team_averages[c(2, 26:47, 54:56, 58)]
+
+new_row[1] = running_games_data$Game_ID[length(running_games_data)] + 1
+running_games_data = rbind(running_games_data, new_row)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+predictions2 = read_csv("Predictions.csv")
+ALLNBAGames = read_csv("ALLNBAGames.csv")
+predictions3 = read_csv("PredictionsTemp.csv")
+```
+
+
+```{r}
+predict_df = data.frame()
+for (i in 1:nrow(predictions2)) {
+  home_team = predictions2$Home[i]
+  away_team = predictions2$Away[i]
+  
+  home_games = subset(ALLNBAGames, ALLNBAGames$HOME_TEAM == home_team)
+  away_games = subset(ALLNBAGames, ALLNBAGames$AWAY_TEAM == away_team)
+  
+  home_games = home_games[(nrow(home_games)-4):nrow(home_games),]
+  away_games = away_games[(nrow(away_games)-4):nrow(away_games),]
+  
+  home_games = sapply(home_games, as.numeric)
+  away_games = sapply(away_games, as.numeric)
+  
+  home_averages = apply(home_games, 2, mean)
+  away_averages = apply(away_games, 2, mean)
+  
+  # new_row = data.frame("HOME_TEAM_WINS" = 1, "FGM_home" = home_averages[7], "FGA_home" = home_averages[8], "FG_PCT_home" = home_averages[9], "FG3M_home" = home_averages[10], "FG3A_home" = home_averages[11], "FG3_PCT_home" = home_averages[12], "FTT_PCT_home" = home_averages[13], "FG2M_home" = home_averages[14], "FG2A_home" = home_averages[15], "FG2_PCT_home" = home_averages[16], "MIN_home" = home_averages[17], "FTM_home" = home_averages[18], "FTA_home" = home_averages[19], "OREB_home" = home_averages[20], "DREB_home" = home_averages[21], "AST_home" = home_averages[22], "STL_home" = home_averages[23], "BLK_home" = home_averages[24], "TOV_home" = home_averages[25], "PF_home" = home_averages[26], "PTS_home" = home_averages[27], "AWAY_TEAM_WINS" = 0, "FGM_away" = away_averages[35], "FGA_away" = away_averages[36], "FG_PCT_away" = away_averages[37], "FG3M_away" = away_averages[38], "FG3A_away" = away_averages[39], "FG3_PCT_away" = away_averages[40], "FTT_PCT_away" = away_averages[41], "FG2M_away" = away_averages[42], "FG2A_away" = away_averages[43], "FG2_PCT_away" = away_averages[44], "MIN_away" = away_averages[45], "FTM_away" = away_averages[46], "FTA_away" = away_averages[47], "OREB_away" = away_averages[48], "DREB_away" = away_averages[49], "AST_away" = away_averages[50], "STL_away" = away_averages[51], "BLK_away" = away_averages[52], "TOV_away" = away_averages[53], "PF_away" = away_averages[54], "PTS_away" = away_averages[55], "Spread" = home_averages[29], "STARTERS_PM_home" = 10.32237, "STARTERS_PM_away" = -7.344298, "BULLY_BALL_home" = 0.09564571, "BULLY_BALL_away" = 0.1004974)
+  
+  new_row = c(1, home_averages[c(7:21, 23:29)], 0, away_averages[c(35:49, 51:56)], 10.32237, -7.344298, 0.09564571, 0.1004974)
+  
+  predict_df = rbind(predict_df, new_row)
+}
+```
+
+
+```{r}
+home_averages
+```
+
+
+```{r}
+colnames(home_averages)
+```
+
+
+```{r}
+i = 1
+home_team = predictions2$Home[i]
+away_team = predictions2$Away[i]
+
+home_games = subset(ALLNBAGames, ALLNBAGames$HOME_TEAM == home_team)
+away_games = subset(ALLNBAGames, ALLNBAGames$AWAY_TEAM == away_team)
+
+home_games = home_games[(nrow(home_games)-4):nrow(home_games),]
+away_games = away_games[(nrow(away_games)-4):nrow(away_games),]
+
+home_games = sapply(home_games, as.numeric)
+away_games = sapply(away_games, as.numeric)
+
+home_averages = apply(home_games, 2, mean)
+away_averages = apply(away_games, 2, mean)
+```
+
+
+
+
+
+```{r}
+home_averages[c(6:28, )]
+```
+
+
+```{r}
+write_csv(predict_df, "prediction_data.csv")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

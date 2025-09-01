@@ -1,0 +1,497 @@
+---
+title: "Playoff 2 Messy Work 3"
+author: "Weston Murdock"
+date: "2023-04-03"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(readr) # Data Reading
+library(car) # VIF Calculation
+library(Stat2Data) # Textbook
+library(leaps) # Model Selection
+library(corrplot) # Correlation Plot
+library(polynom) # Polynomial Models
+library(bestglm) # Logistic Regression Model Selection
+library(MASS) # Better Logistic Regression Model Selection
+library(dplyr) # Piping Syntax
+library(gmodels) # Contrasts
+library(ggplot2) # Visualizations
+library(data.table)
+library(zoo)
+library(nbastatR)
+library(data.table)
+library(Metrics)
+
+logit = function(B0, B1, x)
+{
+  exp(B0+B1*x)/(1+exp(B0+B1*x))
+}
+
+Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
+```
+
+
+```{r}
+temp = list.files("/Users/wlm0921/Documents/Current Courses/STOR 538/Playoff 2/CSV Files/", pattern="*.csv")
+setwd("/Users/wlm0921/Documents/Current Courses/STOR 538/Playoff 2/CSV Files/")
+for (i in 1:length(temp)) {
+  assign(substr(temp[i], 1, nchar(temp[i]) - 4), read.csv(temp[i]))
+}
+```
+
+
+```{r}
+player_game_details = read_csv("GAMES_DETAILS_H_W.csv")
+bad_ids = read_csv("BAD_IDs.csv")
+games_data = read_csv("games_data.csv")
+```
+
+
+```{r}
+games_data_train = read_csv("games_data_train.csv")
+games_data_test = read_csv("games_data_test.csv")
+```
+
+
+```{r}
+games_details = read_csv("new_games_details.csv")
+bad_ids = read_csv("new_bad_ids.csv")
+```
+
+
+```{r}
+unique_ids = unique(games_details$idPlayer)
+length(unique_ids)
+```
+
+
+```{r}
+write_csv(games_details, "new_games_details.csv")
+write_csv(bad_ids, "new_bad_ids.csv")
+```
+
+
+```{r}
+indices = 401:501
+for (id in unique_ids[indices]) {
+  player_pm = games_details$plusminus[which(games_details$idPlayer == id)]
+  if ((length(player_pm[which(!is.na(player_pm))]) > 0 ) & (id != 1629670)) {
+    tryCatch({
+      profile = player_profiles(player_ids = id, return_message = FALSE)
+      which_indices = which(games_details$idPlayer == id)
+      games_details$HEIGHT[which_indices] = profile$heightInches
+      games_details$WEIGHT[which_indices] = profile$weightLBS
+    }, error = function(a) {
+      bad_ids <<- rbind(bad_ids, data.frame(bad_ids = id))
+    }
+    )
+  }
+}
+```
+
+
+```{r}
+player_profiles(players = "Jordan Nwora")
+```
+
+
+```{r}
+which_indices = which(games_details$idPlayer == 1629670)
+games_details$HEIGHT[which_indices] = 81
+games_details$WEIGHT[which_indices] = 225
+```
+
+
+```{r}
+import_ids = 22200479:22201076
+
+games_details = box_scores(game_ids = import_ids, box_score_types = "Traditional", result_types="player")
+games_details = games_details[[2]][[1]]
+games_details$HEIGHT = NA
+games_details$WEIGHT = NA
+```
+
+
+```{r}
+games_details_new = games_details
+games_details_old = read_csv("GAMES_DETAILS_H_W.csv")
+```
+
+```{r}
+shared_games_old = intersect(ALLNBAGames$Game_ID, games_details_old$GAME_ID)
+shared_games_new = intersect(ALLNBAGames$Game_ID, games_details_new$idGame)
+```
+
+
+```{r}
+games_data = ALLNBAGames
+games_data$OREB = games_data$OREB_home + games_data$OREB_away
+games_data$Total = games_data$PTS_home + games_data$PTS_away
+games_data$Spread = games_data$PTS_home - games_data$PTS_away
+```
+
+
+```{r}
+games_details = games_details_new
+```
+
+
+```{r}
+games_all_players = games_details[which(!is.na(games_details$minExact)),]
+
+games_starters = games_details[which(!is.na(games_details$groupStartPosition)),]
+
+aggregated_all_players = games_all_players %>% group_by(idGame, idTeam) %>% summarise(AVG_HEIGHT = mean(HEIGHT, na.rm=TRUE), AVG_WEIGHT = mean(WEIGHT, na.rm=TRUE))
+
+aggregated_starters = games_starters %>% group_by(idGame, idTeam) %>% summarise(STARTERS_PM = sum(plusminus, na.rm=TRUE))
+
+aggregated_data = unique(games_details[, c("idGame", "idTeam")]) %>% merge(aggregated_all_players) %>% merge(aggregated_starters)
+
+
+
+aggregated_data$row = seq_len(nrow(aggregated_data)) %% 2
+aggregated_home = aggregated_data[aggregated_data$row == 1,]
+aggregated_away = aggregated_data[aggregated_data$row == 0,]
+
+aggregated_home = aggregated_home %>% rename(
+  Game_ID = idGame,
+  TEAM_ID_home = idTeam,
+  AVG_HEIGHT_home = AVG_HEIGHT,
+  AVG_WEIGHT_home = AVG_WEIGHT,
+  STARTERS_PM_home = STARTERS_PM
+)
+aggregated_home = aggregated_home[,-6]
+
+aggregated_away = aggregated_away %>% rename(
+  Game_ID = idGame,
+  TEAM_ID_away = idTeam,
+  AVG_HEIGHT_away = AVG_HEIGHT,
+  AVG_WEIGHT_away = AVG_WEIGHT,
+  STARTERS_PM_away = STARTERS_PM
+)
+aggregated_away = aggregated_away[,-6]
+
+
+
+games_data3 = games_data %>% merge(aggregated_home) %>% merge(aggregated_away)
+
+
+
+games_data3$BULLY_BALL_home = (games_data3$AVG_HEIGHT_home * games_data3$AVG_WEIGHT_home)
+games_data3$BULLY_BALL_home = (games_data3$BULLY_BALL_home - min(games_data3$BULLY_BALL_home)) / range(games_data3$BULLY_BALL_home)
+
+games_data3$BULLY_BALL_away = (games_data3$AVG_HEIGHT_away * games_data3$AVG_WEIGHT_away)
+games_data3$BULLY_BALL_away = (games_data3$BULLY_BALL_away - min(games_data3$BULLY_BALL_away)) / range(games_data3$BULLY_BALL_away)
+
+
+
+games_data_NEW = games_data3
+```
+
+
+```{r}
+head(games_data_OLD)
+```
+
+
+```{r}
+head(games_data_NEW)
+```
+
+
+```{r}
+games_data4 = rbind(games_data_OLD, games_data_NEW)
+```
+
+
+```{r}
+write_csv(games_data4, "games_data.csv")
+```
+
+
+```{r}
+min(games_data4$GAME_DATE_EST.x)
+```
+
+
+```{r}
+games_data = games_data4
+```
+
+
+```{r}
+games_data <- games_data %>%
+rename(Season = SEASON.x,
+Date = GAME_DATE_EST.x)
+
+games_data <- games_data %>%
+select(-SEASON.y,-GAME_DATE_EST.y)
+
+games_data <- games_data %>%
+mutate(HOME_TEAM_WINS = ifelse(HOME_TEAM_WINS == "W",1,0),
+AWAY_TEAM_WINS = ifelse(AWAY_TEAM_WINS == "W",1,0))
+games_data %>%
+subset(Season > 2012)
+
+
+games_data_early <- filter(games_data, between(Season, 2013, 2015))
+games_data_middle <- filter(games_data, between(Season, 2016, 2019))
+games_data_recent <- filter(games_data, between(Season, 2020, 2023))
+
+sample_early <- sample_n(games_data_early, 615)
+sample_middle <- sample_n(games_data_middle, 1636)
+sample_recent <- sample_n(games_data_recent, 2241)
+
+games_data <- rbind(sample_early, sample_middle, sample_recent)
+
+games_data <- games_data %>%
+select(-Season, -Date, -HOME_TEAM, -REB_home, -SPREAD_home, -AWAY_TEAM, -REB_away, -SPREAD_away)
+games_data
+
+
+# train, test
+
+set.seed(178)
+game_sample <- sample(c(TRUE, FALSE), nrow(games_data), replace=TRUE, prob=c(0.8,0.2))
+games_data_train <- games_data[game_sample, ]
+games_data_test <- games_data[!game_sample, ]
+
+#writing
+write_csv(games_data, "games_data.csv")
+write_csv(games_data_train, "games_data_train.csv")
+write_csv(games_data_test, "games_data_test.csv")
+```
+
+
+```{r}
+(nrow(games_data_early))/3
+```
+
+
+```{r}
+2*nrow(games_data_middle)/3
+```
+
+
+```{r}
+nrow(games_data_recent)
+```
+
+
+```{r}
+3580+912
+```
+
+
+```{r}
+1846+2454+2241
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+colnames(games_data)
+```
+
+
+```{r}
+OREB_cor = cor(games_data[ , colnames(games_data) != "OREB"]  %>% select_if(is.numeric), games_data$OREB)
+OREB_cor
+```
+
+
+```{r}
+games_data_numeric = games_data %>% select_if(is.numeric)
+head(games_data_numeric)
+```
+
+
+```{r}
+model1 = lm(OREB~.-OREB_home-OREB_away-DREB_home-DREB_away-REB_home-REB_away, data=games_data_numeric)
+summary(model1)
+```
+
+
+```{r}
+mae(games_data_numeric$OREB, predict(model1))
+```
+
+
+```{r}
+model2 = lm(OREB~(FGM_home+FGA_home+FG3M_home+FG3A_home+FG2_PCT_home+MIN_home+FTM_home+FTA_home+AST_home+BLK_home+TOV_home+SPREAD_home+FGA_away+FG3M_away+FG3A_away+FG3_PCT_away+FTA_away+AST_away+TOV_away+AVG_HEIGHT_home+AVG_WEIGHT_home+STARTERS_PM_home+AVG_HEIGHT_away+AVG_WEIGHT_away+STARTERS_PM_away+BULLY_BALL_home+BULLY_BALL_away)^2, data=games_data_numeric)
+summary(model2)
+```
+
+
+```{r}
+mae(games_data_numeric$OREB, predict(model2))
+```
+
+
+```{r}
+test_frame = data.frame(nums = 1:100)
+indices = -3:-1
+
+test_frame$roll = rollapplyr(test_frame$nums, width=list(indices), FUN=mean, fill=NA)
+
+head(test_frame)
+```
+
+
+```{r}
+games_data_rolling_test = games_data_test[order(games_data_test$Game_ID),]
+unique_teams = unique(games_data_test$TEAM_ID_home)
+column_names = colnames(games_data_test[,c(5:25, 27:58)])
+indices = -10:-1
+
+for (team in unique_teams) {
+  team_indices = which(games_data$TEAM_ID_home == team | games_data$TEAM_ID_away == team)
+  team_data = games_data[team_indices,]
+  for (col in column_names) {
+    rolling_values = rollapplyr(games_data$nums, width=list(indices), FUN=mean, fill=NA)
+    games_data_rolling_test[,col] = rolling_values[team_indices]
+  }
+}
+```
+
+
+```{r}
+unique_teams = unique(games_data_test$TEAM_ID_home)
+test_team = unique_teams[1]
+test_team
+test_indices = which(games_data$TEAM_ID_home == test_team | games_data$TEAM_ID_away == test_team)
+test_data = games_data[test_indices,]
+head(test_data)
+```
+
+
+```{r}
+games_data_rolling_test = games_data_test[order(games_data_test$Game_ID),]
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+test_box_score = box_scores(game_ids = c(22201075, 22201076), box_score_types = "Traditional", result_types="player")
+head(test_box_score[[2]][[1]])
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

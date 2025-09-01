@@ -1,0 +1,216 @@
+---
+title: "Playoff 2 Messy Work 4"
+author: "Weston Murdock"
+date: "2023-04-03"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(readr) # Data Reading
+library(car) # VIF Calculation
+library(Stat2Data) # Textbook
+library(leaps) # Model Selection
+library(corrplot) # Correlation Plot
+library(polynom) # Polynomial Models
+library(bestglm) # Logistic Regression Model Selection
+library(MASS) # Better Logistic Regression Model Selection
+library(dplyr) # Piping Syntax
+library(gmodels) # Contrasts
+library(ggplot2) # Visualizations
+library(data.table)
+library(zoo)
+library(nbastatR)
+library(data.table)
+library(Metrics)
+
+logit = function(B0, B1, x)
+{
+  exp(B0+B1*x)/(1+exp(B0+B1*x))
+}
+
+Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
+```
+
+
+```{r}
+temp = list.files("/Users/wlm0921/Documents/Current Courses/STOR 538/Playoff 2/CSV Files/", pattern="*.csv")
+setwd("/Users/wlm0921/Documents/Current Courses/STOR 538/Playoff 2/CSV Files/")
+for (i in 1:length(temp)) {
+  assign(substr(temp[i], 1, nchar(temp[i]) - 4), read.csv(temp[i]))
+}
+```
+
+
+```{r}
+player_game_details = read_csv("GAMES_DETAILS_H_W.csv")
+bad_ids = read_csv("BAD_IDs.csv")
+games_data = read_csv("games_data.csv")
+```
+
+
+```{r}
+games_data_train = read_csv("games_data_train.csv")
+games_data_test = read_csv("games_data_test.csv")
+
+games_data_train = games_data_train[order(games_data_train$Game_ID),]
+games_data_test = games_data_test[order(games_data_test$Game_ID),]
+```
+
+
+```{r}
+games_data_rolling_test = games_data_test[order(games_data_test$Game_ID),]
+unique_teams = unique(games_data_test$TEAM_ID_home)
+column_names = colnames(games_data_test[,c(5:25, 27:58)])
+indices = -10:-1
+head(games_data_rolling_test)
+```
+
+
+```{r}
+for (team in unique_teams) {
+  team_indices = which(games_data$TEAM_ID_home == team | games_data$TEAM_ID_away == team)
+  team_data = games_data[team_indices,]
+  for (col in column_names) {
+    rolling_values = rollapply(games_data$nums, width=list(indices), FUN=mean, fill=NA, align="right")
+    games_data_rolling_test[,col] = rolling_values[team_indices]
+  }
+}
+```
+
+
+```{r}
+test_team = unique_teams[1]
+test_team
+test_team_indices = which(games_data_rolling_test$TEAM_ID_home == test_team | games_data_rolling_test$TEAM_ID_away == test_team)
+test_teams_data = games_data_rolling_test[test_team_indices,]
+test_indices = which(games_data$TEAM_ID_home == test_team | games_data$TEAM_ID_away == test_team)
+test_data = games_data[test_indices,]
+head(test_teams_data)
+head(test_data)
+```
+
+
+```{r}
+indices = -10:-1
+rolled_OREB = rollapply(test_data$OREB, width=list(indices), FUN=mean, fill=NA, align="right")
+rolled_OREB = data.frame(Game_ID = test_data$Game_ID, OREB = rolled_OREB)
+rolled_OREB = subset(rolled_OREB, Game_ID %in% games_data_rolling_test$Game_ID)
+# games_data_rolling_test$OREB[test_indices] = replace(games_data_rolling_test$OREB, test_indices, rolled_OREB)
+# for (i in 1:length(rolled_OREB)) {
+#   games_data_rolling_test$OREB[test_indices[i]] = rolled_OREB[i]
+# }
+```
+
+
+```{r}
+games_data_rolling_test[test_team_indices, "OREB"] = rolled_OREB$OREB
+```
+
+
+```{r}
+test_data_OREB = games_data_rolling_test[test_indices, "OREB"]
+test_data_OREB
+```
+
+
+```{r}
+rolled_OREB2[test_team_indices]
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+hist(games_data$Spread, breaks=40)
+```
+
+
+```{r}
+hist(games_data$Total, breaks=40)
+```
+
+
+```{r}
+hist(games_data$OREB, breaks=40)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
