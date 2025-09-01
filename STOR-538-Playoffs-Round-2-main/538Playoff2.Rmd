@@ -1,0 +1,221 @@
+```{r}
+library(nbastatR)
+library(readr)
+library(tidyverse)
+library(dplyr)
+Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
+NBATeams = read_csv("teams.csv")
+view(NBATeams)
+NBAGames23=game_logs(
+  seasons = 2023,
+  league = "NBA",
+  result_types = "team",
+  season_types = "Regular Season",
+  nest_data = F,
+  assign_to_environment = TRUE,
+  return_message = TRUE
+)
+view(NBAGames23)
+```
+```{r}
+games_list = list()
+for (i in 22200001:22201135)
+{GAME=filter(NBAGames23,idGame==i) 
+HOME=GAME %>% filter(locationGame=="H") %>% select(-locationGame,-numberGameTeamSeason,-isB2B,-isB2BFirst,-isB2BSecond,-slugMatchup,-slugTeam,-countDaysRestTeam,-countDaysNextGameTeam,-slugOpponent,-slugTeamLoser,-slugTeamWinner,-isWin,-hasVideo,-urlTeamSeasonLogo,-slugSeason,-typeSeason,-slugLeague)
+AWAY=GAME %>% filter(locationGame=="A")  %>% select(-locationGame,-numberGameTeamSeason,-isB2B,-isB2BFirst,-isB2BSecond,-slugMatchup,-slugTeam,-countDaysRestTeam,-countDaysNextGameTeam,-slugOpponent,-slugTeamLoser,-slugTeamWinner,-isWin,-hasVideo,-urlTeamSeasonLogo,-slugSeason,-typeSeason,-slugLeague)
+HOME = HOME %>% rename(GAME_DATE_EST=dateGame, Game_ID=idGame, HOME_TEAM=nameTeam, TEAM_ID_home=idTeam, HOME_TEAM_WINS=outcomeGame,FGM_home=fgmTeam, FGA_home=fgaTeam, FG_PCT_home=pctFGTeam, FG3M_home=fg3mTeam, FG3A_home=fg3aTeam,FG3_PCT_home=pctFG3Team,FTT_PCT_home=pctFTTeam,FG2M_home=fg2mTeam, FG2A_home=fg2aTeam,FG2_PCT_home=pctFG2Team,MIN_home=minutesTeam,FTM_home=ftmTeam,FTA_home=ftaTeam,OREB_home=orebTeam,DREB_home=drebTeam,REB_home=trebTeam,AST_home=astTeam,STL_home=stlTeam,BLK_home=blkTeam,TOV_home=tovTeam,PF_home=pfTeam,PTS_home=ptsTeam,SPREAD_home=plusminusTeam,SEASON=yearSeason)
+AWAY = AWAY %>% rename(GAME_DATE_EST=dateGame, Game_ID=idGame, AWAY_TEAM=nameTeam, TEAM_ID_away=idTeam, AWAY_TEAM_WINS=outcomeGame,FGM_away=fgmTeam, FGA_away=fgaTeam, FG_PCT_away=pctFGTeam, FG3M_away=fg3mTeam, FG3A_away=fg3aTeam,FG3_PCT_away=pctFG3Team,FTT_PCT_away=pctFTTeam,FG2M_away=fg2mTeam, FG2A_away=fg2aTeam,FG2_PCT_away=pctFG2Team,MIN_away=minutesTeam,FTM_away=ftmTeam,FTA_away=ftaTeam,OREB_away=orebTeam,DREB_away=drebTeam,REB_away=trebTeam,AST_away=astTeam,STL_away=stlTeam,BLK_away=blkTeam,TOV_away=tovTeam,PF_away=pfTeam,PTS_away=ptsTeam,SPREAD_away=plusminusTeam,SEASON=yearSeason)
+games_list[[length(games_list)+1]] = assign(paste0("GAME",i),full_join(HOME,AWAY, by=c("Game_ID")))}
+
+AllNBAGames = read_csv("ALLNBAGames.csv")
+NBAGames23 = bind_rows(games_list)
+
+NBAGames23$Possesions_Home = 0.5*((NBAGames23$FGA_home+0.4*NBAGames23$FTA_home-1.07*(NBAGames23$OREB_home/(NBAGames23$OREB_home+NBAGames23$DREB_away))*(NBAGames23$FGA_home-NBAGames23$FGM_home)+NBAGames23$TOV_home+(NBAGames23$FGA_away+0.4*NBAGames23$FTA_away-1.07*(NBAGames23$OREB_away/(NBAGames23$OREB_away+NBAGames23$DREB_home))*(NBAGames23$FGA_away - NBAGames23$FGM_away)+NBAGames23$TOV_away)))
+NBAGames23$OER_Home = 100*(NBAGames23$PTS_home/NBAGames23$Possesions_Home)
+NBAGames23$Possesions_Away = 0.5*((NBAGames23$FGA_away+0.4*NBAGames23$FTA_away-1.07*(NBAGames23$OREB_away/(NBAGames23$OREB_away+NBAGames23$DREB_home))*(NBAGames23$FGA_away-NBAGames23$FGM_away)+NBAGames23$TOV_away+(NBAGames23$FGA_home+0.4*NBAGames23$FTA_home-1.07*(NBAGames23$OREB_home/(NBAGames23$OREB_home+NBAGames23$DREB_away))*(NBAGames23$FGA_home - NBAGames23$FGM_home)+NBAGames23$TOV_home)))
+NBAGames23$OER_Away = 100*(NBAGames23$PTS_away/NBAGames23$Possesions_Away)
+NBAGames23$DER_Away = 100*(NBAGames23$PTS_home/NBAGames23$Possesions_Home)
+NBAGames23$DER_Home = 100*(NBAGames23$PTS_away/NBAGames23$Possesions_Away)
+NBAGames23 = NBAGames23 %>% select(-SEASON.y,-GAME_DATE_EST.y)
+AllNBAGames = rbind(AllNBAGames, NBAGames23)
+write_csv(AllNBAGames, "ALLNBAGames.csv")
+```
+
+```{r}
+NBAPlayers23 = read_csv("NBAPlayers23.csv")
+view(NBAPlayers23)
+AtlantaHawksPlayers = subset(NBAPlayers23, Tm == "ATL")
+AtlantaHawksTotalVORP = sum(AtlantaHawksPlayers$NewVORP)
+view(AtlantaHawksTotalVORP)
+write_csv(AtlantaHawksPlayers, "AtlantaHawksPlayers.csv")
+BostonCelticsPlayers = subset(NBAPlayers23, Tm == "BOS")
+BostonCelticsVORP = sum(BostonCelticsPlayers$NewVORP)
+view(BostonCelticsVORP)
+write_csv(BostonCelticsPlayers, "BostonCelticsPlayers.csv")
+ClevelandCavaliersPlayers = subset(NBAPlayers23, Tm == "CLE")
+ClevelandCavaliersVORP = sum(ClevelandCavaliersPlayers$NewVORP)
+view(ClevelandCavaliersVORP)
+write_csv(ClevelandCavaliersPlayers, "ClevelandCavaliersPlayers.csv")
+NOLAPelicansPlayers = subset(NBAPlayers23, Tm == "NOP")
+NOLAPelicansVORP = sum(NOLAPelicansPlayers$NewVORP)
+view(NOLAPelicansVORP)
+write_csv(NOLAPelicansPlayers, "NOLAPelicansPlayers.csv")
+ChicagoBullsPlayers = subset(NBAPlayers23, Tm == "CHI")
+ChicagoBullsVORP = sum(ChicagoBullsPlayers$NewVORP)
+view(ChicagoBullsVORP)
+write_csv(ChicagoBullsPlayers, "ChicagoBullsPlayers.csv")
+DallasMavericksPlayers = subset(NBAPlayers23, Tm == "DAL")
+DallasMavericksVORP = sum(DallasMavericksPlayers$NewVORP)
+view(DallasMavericksVORP)
+write_csv(DallasMavericksPlayers, "DallasMavericksPlayers.csv")
+DenverNuggetsPlayers = subset(NBAPlayers23, Tm == "DEN")
+DenverNuggetsVORP = sum(DenverNuggetsPlayers$NewVORP)
+view(DenverNuggetsVORP)
+write_csv(DenverNuggetsPlayers, "DenverNuggetsPlayers.csv")
+GSWarriorsPlayers = subset(NBAPlayers23, Tm == "GSW")
+GSWarriorsVORP = sum(GSWarriorsPlayers$NewVORP)
+view(GSWarriorsVORP)
+write_csv(GSWarriorsPlayers, "GSWarriorsPlayers.csv")
+HoustonRocketsPlayers = subset(NBAPlayers23, Tm == "HOU")
+HoustonRocketsVORP = sum(HoustonRocketsPlayers$NewVORP)
+view(HoustonRocketsVORP)
+write_csv(HoustonRocketsPlayers, "HoustonRocketsPlayers.csv")
+LAClippersPlayers = subset(NBAPlayers23, Tm == "LAC")
+write_csv(LAClippersPlayers, "LAClippersPlayers.csv")
+LALakersPlayers = subset(NBAPlayers23, Tm == "LAL")
+write_csv(LALakersPlayers, "LALakersPlayers.csv")
+MiamiHeatPlayers = subset(NBAPlayers23, Tm == "MIA")
+write_csv(MiamiHeatPlayers, "MiamiHeatPlayers.csv")
+MilwaukeeBucksPlayers = subset(NBAPlayers23, Tm == "MIL")
+write_csv(MilwaukeeBucksPlayers, "MilwaukeeBucksPlayers.csv")
+MinnesotaTimberwolvesPlayers = subset(NBAPlayers23, Tm == "MIN")
+write_csv(MinnesotaTimberwolvesPlayers, "MinnesotaTimberwolvesPlayers.csv")
+BrooklynNetsPlayers = subset(NBAPlayers23, Tm == "BRK")
+write_csv(BrooklynNetsPlayers, "BrooklynNetsPlayers.csv")
+NYKnicksPlayers = subset(NBAPlayers23, Tm == "NYK")
+write_csv(NYKnicksPlayers, "NYKnicksPlayers.csv")
+OrlandoMagicPlayers = subset(NBAPlayers23, Tm == "ORL")
+write_csv(OrlandoMagicPlayers, "OrlandoMagicPlayers.csv")
+IndianaPacersPlayers = subset(NBAPlayers23, Tm == "IND")
+write_csv(IndianaPacersPlayers, "IndianaPacersPlayers.csv")
+Philadelphia76ersPlayers = subset(NBAPlayers23, Tm == "PHI")
+write_csv(Philadelphia76ersPlayers, "Philadelphia76ersPlayers.csv")
+PhoenixSunsPlayers = subset(NBAPlayers23, Tm == "PHO")
+write_csv(PhoenixSunsPlayers, "PhoenixSunsPlayers.csv")
+PortlandTrailBlazersPlayers = subset(NBAPlayers23, Tm == "POR")
+write_csv(PortlandTrailBlazersPlayers, "PortlandTrailBlazersPlayers.csv")
+SacramentoKingsPlayers = subset(NBAPlayers23, Tm == "SAC")
+write_csv(SacramentoKingsPlayers, "SacramentoKingsPlayers.csv")
+SanAntonioSpursPlayers = subset(NBAPlayers23, Tm == "SAS")
+write_csv(SanAntonioSpursPlayers, "SanAntonioSpursPlayers.csv")
+OKCThunderPlayers = subset(NBAPlayers23, Tm == "OKC")
+write_csv(OKCThunderPlayers, "OKCThunderPlayers.csv")
+TorontoRaptorsPlayers = subset(NBAPlayers23, Tm == "TOR")
+write_csv(TorontoRaptorsPlayers, "TorontoRaptorsPlayers.csv")
+UtahJazzPlayers = subset(NBAPlayers23, Tm == "UTA")
+write_csv(UtahJazzPlayers, "UtahJazzPlayers.csv")
+MemphisGrizzliesPlayers = subset(NBAPlayers23, Tm == "MEM")
+write_csv(MemphisGrizzliesPlayers, "MemphisGrizzliesPlayers.csv")
+WashingtonWizardsPlayers = subset(NBAPlayers23, Tm == "WAS")
+write_csv(WashingtonWizardsPlayers, "WashingtonWizardsPlayers.csv")
+DetroitPistonsPlayers = subset(NBAPlayers23, Tm == "DET")
+write_csv(DetroitPistonsPlayers, "DetroitPistonsPlayers.csv")
+CharlotteHornetsPlayers = subset(NBAPlayers23, Tm == "CHO")
+write_csv(CharlotteHornetsPlayers, "CharlotteHornetsPlayers.csv")
+TradedPlayers23 = subset(NBAPlayers23, Tm == "TOT")
+write_csv(TradedPlayers23, "TradedPlayers23.csv")
+```
+
+```{r}
+AllNBAGames$PredictedSpread = AllNBAGames$PredictedHomeScore - AllNBAGames$PredictedAwayScore
+HomeScoreModel = lm(PTS_home~PredictedHomeScore, data = AllNBAGames)
+summary(HomeScoreModel)
+plot(HomeScoreModel, c(1:5))
+AllNBAGames$PredictedHomeScore = (AllNBAGames$Possesions_Home*(100+(AllNBAGames$OER_Home-100)-(AllNBAGames$DER_Away-100)))/100
+AllNBAGames$PredictedAwayScore = (AllNBAGames$Possesions_Away*(100+(AllNBAGames$OER_Away-100)-(AllNBAGames$DER_Home-100)))/100
+SpreadModel1 = lm(SPREAD_home~ PredictedHomeScore + PredictedAwayScore, data = AllNBAGames)
+SpreadModel2 = lm(SPREAD_home ~ OER_Home - OER_Away, data = AllNBAGames)
+summary(SpreadModel2)
+plot(SpreadModel2, c(1:5))
+summary(SpreadModel1)
+anova(SpreadModel1)
+plot(SpreadModel1, c(1:5))
+mean(SpreadModel1$residuals)
+plot(SPREAD_home~PredictedHomeScore-PredictedAwayScore, data = AllNBAGames)
+abline(SpreadModel1)
+cor.test(AllNBAGames$PTS_away, AllNBAGames$OER_Away)
+vif(SpreadModel2)
+```
+
+```{r}
+for (i in 1610612737:1610612766)
+{Home23 = subset(NBAGames23, TEAM_ID_home == i)
+Home23 = Home23 %>% select(-DER_Away,-OER_Away,-Possesions_Away,-SPREAD_away,-PTS_away,-PF_away,-TOV_away,-BLK_away,-STL_away,-AST_away,-REB_away,-DREB_away,-OREB_away,-FTA_away,-FTM_away,-MIN_away,-FG2_PCT_away,-FG2A_away, -FTT_PCT_away,-FG3_PCT_away,-FGA_away,-FGM_away,-AWAY_TEAM_WINS,-TEAM_ID_away,-AWAY_TEAM,-FG_PCT_away,-FG3M_away,-FG3A_away,-FG2M_away)
+Home23 = Home23 %>% rename(TEAM = HOME_TEAM,TEAM_ID = TEAM_ID_home, Wins = HOME_TEAM_WINS, FGM = FGM_home, FGA = FGA_home, FG_PCT = FG_PCT_home, FG3M = FG3M_home, FG3A = FG3A_home, FG3_PCT = FG3_PCT_home, FTT_PCT = FTT_PCT_home, FG2M = FG2M_home, FG2A = FG2A_home, FG2_PCT = FG2_PCT_home, MIN = MIN_home, FTM = FTM_home, FTA = FTA_home, OREB = OREB_home, DREB = DREB_home, REB = REB_home, AST = AST_home, STL = STL_home, BLK = BLK_home, TOV = TOV_home, PF = PF_home, Spread = SPREAD_home, Possesions = Possesions_Home, OER = OER_Home, DER = DER_Home, PTS = PTS_home)
+Away23 = subset(NBAGames23, TEAM_ID_away == i)
+Away23 = Away23 %>% select(-DER_Home,-OER_Home,-Possesions_Home,-SPREAD_home,-PTS_home,-PF_home,-TOV_home,-BLK_home,-STL_home,-AST_home,-REB_home,-DREB_home,-OREB_home,-FTA_home,-FTM_home,-MIN_home,-FG2_PCT_home,-FG2A_home, -FTT_PCT_home,-FG3_PCT_home,-FGA_home,-FGM_home,-HOME_TEAM_WINS,-TEAM_ID_home,-HOME_TEAM, -FG_PCT_home, -FG3M_home,-FG3A_home,-FG2M_home)
+Away23 = Away23 %>% rename(TEAM = AWAY_TEAM,TEAM_ID = TEAM_ID_away, Wins = AWAY_TEAM_WINS, FGM = FGM_away, FGA = FGA_away, FG_PCT = FG_PCT_away, FG3M = FG3M_away, FG3A = FG3A_away, FG3_PCT = FG3_PCT_away, FTT_PCT = FTT_PCT_away, FG2M = FG2M_away, FG2A = FG2A_away, FG2_PCT = FG2_PCT_away, MIN = MIN_away, FTM = FTM_away, FTA = FTA_away, OREB = OREB_away, DREB = DREB_away, REB = REB_away, AST = AST_away, STL = STL_away, BLK = BLK_away, TOV = TOV_away, PF = PF_away, Spread = SPREAD_away, Possesions = Possesions_Away, OER = OER_Away, DER = DER_Away, PTS = PTS_away)
+assign(paste0("TEAM",i),full_join(Home23,Away23))}
+AtlantaHawks23 = TEAM1610612737
+cols = sapply(AtlantaHawks23, is.numeric)
+write_csv(AtlantaHawks23, "AtlantaHawks23.csv")
+BostonCeltice23 = TEAM1610612738
+write_csv(BostonCeltice23, "BostonCeltics23.csv")
+ClevelandCavaliers23 = TEAM1610612739
+write_csv(ClevelandCavaliers23, "ClevelandCavaliers23.csv")
+NOLAPelicans23 = TEAM1610612740
+write_csv(NOLAPelicans23, "NOLAPelicans23.csv")
+ChicagoBulls23 = TEAM1610612741
+write_csv(ChicagoBulls23, "ChicagoBulls23.csv")
+DallasMavericks23 = TEAM1610612742
+write_csv(DallasMavericks23, "DallasMavericks23.csv")
+DenverNuggets23 = TEAM1610612743
+write_csv(DenverNuggets23, "DenverNuggets23.csv")
+GSWarriors23 = TEAM1610612744
+write_csv(GSWarriors23, "GSWarriors23.csv")
+HoustonRockets23 = TEAM1610612745
+write_csv(HoustonRockets23, "HoustonRockets23.csv")
+LAClippers23 = TEAM1610612746
+write_csv(LAClippers23, "LAClippers23.csv")
+LALakers23 = TEAM1610612747
+write_csv(LALakers23, "LALakers23.csv")
+MiamiHeat23 = TEAM1610612748
+write_csv(MiamiHeat23, "MiamiHeat23.csv")
+MilwaukeeBucks23 = TEAM1610612749
+write_csv(MilwaukeeBucks23, "MilwaukeeBucks23.csv")
+MinnesotaTimberwolves23 = TEAM1610612750
+write_csv(MinnesotaTimberwolves23, "MinnesotaTimberwolves23.csv")
+BrooklynNets23 = TEAM1610612751
+write_csv(BrooklynNets23, "BrooklynNets23.csv")
+NYKnicks23 = TEAM1610612752
+write_csv(NYKnicks23, "NYKnicks23.csv")
+OrlandoMagic23 = TEAM1610612753
+write_csv(OrlandoMagic23, "OrlandoMagic23.csv")
+IndianaPacers23 = TEAM1610612754
+write_csv(IndianaPacers23, "IndianaPacers23.csv")
+Philadelphia76ers23 = TEAM1610612755
+write_csv(Philadelphia76ers23, "Philadelphia76ers23.csv")
+PhoenixSuns23 = TEAM1610612756
+write_csv(PhoenixSuns23, "PhoenixSuns23.csv")
+PortlandTrailBlazer23 = TEAM1610612757
+write_csv(PortlandTrailBlazer23, "PortlandTrailBlazer23.csv")
+SacramentoKings23 = TEAM1610612758
+write_csv(SacramentoKings23, "SacramentoKings23.csv")
+SanAntonioSpurs23 = TEAM1610612759
+write_csv(SanAntonioSpurs23, "SanAntonioSpurs23.csv")
+OKCThunder23 = TEAM1610612760
+write_csv(OKCThunder23, "OKCThunder23.csv")
+TorontoRaptors23 = TEAM1610612761
+write_csv(TorontoRaptors23, "TorontoRaptors23.csv")
+UtahJazz23 = TEAM1610612762
+write_csv(UtahJazz23, "UtahJazz23.csv")
+MemphisGrizzlies23 = TEAM1610612763
+write_csv(MemphisGrizzlies23, "MemphisGrizzlies23.csv")
+WashingtonWizards23 = TEAM1610612764
+write_csv(WashingtonWizards23, "WashingtonWizards23.csv")
+DetroitPistons23 = TEAM1610612765
+write_csv(DetroitPistons23, "DetroitPistons23.csv")
+CharlotteHornets23 = TEAM1610612766
+write_csv(CharlotteHornets23, "CharlotteHornets23.csv")
+```
+
